@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Hallucination Arena</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #f5f0e8;
+  --paper: #ede8de;
+  --ink: #1a1610;
+  --ink-light: #4a4438;
+  --ink-faint: #8a8070;
+  --red: #c0392b;
+  --red-pale: #fdf0ee;
+  --green: #1a6b3c;
+  --green-pale: #eef7f2;
+  --amber: #b8600a;
+  --amber-pale: #fdf5e8;
+  --blue: #1a4a8a;
+  --blue-pale: #eef2fa;
+  --rule: #c8c0b0;
+}
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'DM Mono', monospace;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Subtle grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+/* ── HEADER ─────────────────────────────────────────── */
+header {
+  position: relative;
+  z-index: 10;
+  padding: 2.5rem 3rem 2rem;
+  border-bottom: 2px solid var(--ink);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 1rem;
+}
+
+.site-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.site-title em {
+  font-style: italic;
+  color: var(--red);
+}
+
+.site-sub {
+  font-size: 0.65rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 0.4rem;
+}
+
+.hf-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1.5px solid var(--ink);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  background: var(--paper);
+}
+
+.hf-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: blink 1.5s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* ── TOKEN BAR ───────────────────────────────────────── */
+.token-row {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 3rem;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.7rem;
+}
+
+.token-row label {
+  color: var(--ink-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.token-row input {
+  flex: 1;
+  max-width: 420px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: 0.2rem 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--blue);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.token-row input:focus { border-bottom-color: var(--ink); }
+
+.status-pill {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid;
+  border-radius: 1px;
+}
+.status-pill.set { color: var(--green); border-color: var(--green); background: var(--green-pale); }
+.status-pill.unset { color: var(--red); border-color: var(--red); background: var(--red-pale); }
+
+.token-hint {
+  font-size: 0.62rem;
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+
+/* ── MAIN ────────────────────────────────────────────── */
+.layout {
+  position: relative;
+  z-index: 1;
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 2.5rem 3rem;
+}
+
+/* ── PROMPT SECTION ──────────────────────────────────── */
+.prompt-section {
+  margin-bottom: 2.5rem;
+}
+
+.section-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+.prompt-box {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.prompt-box textarea {
+  flex: 1;
+  background: #fff;
+  border: 1.5px solid var(--ink);
+  padding: 1rem 1.2rem;
+  font-family: 'Instrument Serif', serif;
+  font-size: 1.05rem;
+  color: var(--ink);
+  resize: none;
+  outline: none;
+  min-height: 90px;
+  line-height: 1.6;
+  transition: border-color 0.2s;
+  box-shadow: 3px 3px 0 var(--rule);
+}
+.prompt-box textarea:focus { border-color: var(--blue); box-shadow: 3px 3px 0 rgba(26,74,138,0.2); }
+.prompt-box textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+
+.right-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 140px;
+}
+
+.btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.65rem 1rem;
+  border: 1.5px solid;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-run {
+  background: var(--ink);
+  color: var(--cream);
+  border-color: var(--ink);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.15);
+}
+.btn-run:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 rgba(0,0,0,0.2); }
+.btn-run:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-outline {
+  background: transparent;
+  color: var(--ink-light);
+  border-color: var(--rule);
+}
+.btn-outline:hover { border-color: var(--ink); color: var(--ink); }
+
+/* model selector pills */
+.model-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.model-pill {
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--ink-faint);
+  background: var(--paper);
+  user-select: none;
+}
+.model-pill:hover { border-color: var(--ink-light); color: var(--ink); }
+.model-pill.selected { border-color: var(--ink); color: var(--ink); background: #fff; font-weight: 500; }
+
+/* ── ARENA GRID ─────────────────────────────────────── */
+.arena-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.tally {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tally-item { color: var(--ink-faint); }
+.tally-item strong { color: var(--ink); font-weight: 500; }
+
+.arena-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1.5rem;
+}
+
+/* ── MODEL CARD ─────────────────────────────────────── */
+.model-card {
+  background: #fff;
+  border: 1.5px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--rule);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+.model-card:hover { box-shadow: 6px 6px 0 rgba(0,0,0,0.12); }
+
+.card-top {
+  padding: 1rem 1.2rem 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: var(--paper);
+}
+
+.model-name {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.model-org {
+  font-size: 0.6rem;
+  color: var(--ink-faint);
+  margin-top: 0.1rem;
+  letter-spacing: 0.06em;
+}
+
+.card-status {
+  font-size: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.card-status.idle { color: var(--ink-faint); border-color: var(--rule); }
+.card-status.loading { color: var(--amber); border-color: var(--amber); background: var(--amber-pale); animation: statusPulse 1s ease-in-out infinite; }
+.card-status.done { color: var(--green); border-color: var(--green); background: var(--green-pale); }
+.card-status.error { color: var(--red); border-color: var(--red); background: var(--red-pale); }
+
+@keyframes statusPulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+.card-body {
+  padding: 1.2rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.response-text {
+  font-family: 'Instrument Serif', serif;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--ink-light);
+  min-height: 80px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.response-text.loading-state {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* Typing dots */
+.typing-dots span {
+  display: inline-block;
+  width: 5px; height: 5px;
+  background: var(--ink-faint);
+  border-radius: 50%;
+  margin: 0 2px;
+  animation: dot 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+
+/* ── SCORES ──────────────────────────────────────────── */
+.scores-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.score-chip {
+  flex: 1;
+  min-width: 80px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  text-align: center;
+}
+
+.score-chip .chip-val {
+  font-family: 'Instrument Serif', serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1;
+  display: block;
+}
+
+.score-chip .chip-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.chip-val.c-green { color: var(--green); }
+.chip-val.c-amber { color: var(--amber); }
+.chip-val.c-red   { color: var(--red);   }
+
+/* ── VERDICT BANNER ──────────────────────────────────── */
+.verdict-banner {
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 500;
+}
+
+.verdict-banner.v-factual   { color: var(--green);  background: var(--green-pale);  border-color: rgba(26,107,60,0.2); }
+.verdict-banner.v-uncertain { color: var(--amber);  background: var(--amber-pale);  border-color: rgba(184,96,10,0.2); }
+.verdict-banner.v-hallucinated { color: var(--red); background: var(--red-pale); border-color: rgba(192,57,43,0.2); }
+.verdict-banner.v-idle { color: var(--ink-faint); background: transparent; }
+
+.verdict-icon { font-size: 0.9rem; }
+
+/* ── DIFF VIEW ──────────────────────────────────────── */
+.diff-section {
+  margin-top: 2.5rem;
+  display: none;
+}
+.diff-section.visible { display: block; animation: slideUp 0.4s ease; }
+
+@keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+.diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1.5px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--rule);
+  overflow: hidden;
+}
+
+@media(max-width:700px) { .diff-grid { grid-template-columns: 1fr; } }
+
+.diff-col {
+  padding: 1.25rem 1.5rem;
+  border-right: 1px solid var(--rule);
+}
+.diff-col:last-child { border-right: none; }
+
+.diff-col-head {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+}
+
+.diff-content {
+  font-family: 'Instrument Serif', serif;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  color: var(--ink-light);
+}
+
+.diff-content mark.added { background: rgba(26,107,60,0.12); color: var(--green); border-radius: 2px; }
+.diff-content mark.removed { background: rgba(192,57,43,0.12); color: var(--red); text-decoration: line-through; border-radius: 2px; }
+
+/* ── HISTORY LOG ─────────────────────────────────────── */
+.history-section {
+  margin-top: 2.5rem;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.history-table thead tr {
+  border-bottom: 1.5px solid var(--ink);
+}
+
+.history-table th {
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: 0.6rem;
+}
+
+.history-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+  color: var(--ink-light);
+  line-height: 1.4;
+}
+
+.history-table tr:hover td { background: var(--paper); }
+
+.verdict-tag {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.verdict-tag.f { color: var(--green); border-color: var(--green); }
+.verdict-tag.u { color: var(--amber); border-color: var(--amber); }
+.verdict-tag.h { color: var(--red);   border-color: var(--red);   }
+
+/* ── QUICK PROMPTS ──────────────────────────────────── */
+.quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.qp {
+  font-size: 0.62rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  cursor: pointer;
+  color: var(--ink-faint);
+  transition: all 0.15s;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+}
+.qp:hover { border-color: var(--ink); color: var(--ink); background: #fff; }
+
+/* ── SPINNER ────────────────────────────────────────── */
+.spin {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── FOOTER ──────────────────────────────────────────── */
+footer {
+  position: relative; z-index: 1;
+  border-top: 1px solid var(--rule);
+  padding: 1.5rem 3rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.62rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 3rem;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1 class="site-title">LLM Hallucination <em>Arena</em></h1>
+    <p class="site-sub">Compare model responses · Detect factual drift · Score accuracy</p>
+  </div>
+  <div class="hf-badge">
+    <span class="hf-dot"></span>
+    HuggingFace Inference API
+  </div>
+</header>
+
+<div class="token-row">
+  <label>HF Token</label>
+  <input type="password" id="hfToken" placeholder="hf_xxxxxxxxxxxxxxxx" />
+  <span class="status-pill unset" id="tokenStatus">Not set</span>
+  <span class="token-hint">Free token → huggingface.co/settings/tokens</span>
+</div>
+
+<div class="layout">
+
+  <!-- PROMPT -->
+  <div class="prompt-section">
+    <div class="section-label">Query</div>
+    <div class="prompt-box">
+      <div style="flex:1">
+        <textarea id="promptInput" rows="3" placeholder="Ask a factual question to test across models…"></textarea>
+        <div class="quick-prompts" id="quickPrompts">
+          <span class="qp" onclick="setPrompt(this)">Who invented the telephone?</span>
+          <span class="qp" onclick="setPrompt(this)">When did the Berlin Wall fall?</span>
+          <span class="qp" onclick="setPrompt(this)">What is the capital of Australia?</span>
+          <span class="qp" onclick="setPrompt(this)">How many bones are in the human body?</span>
+          <span class="qp" onclick="setPrompt(this)">Who wrote Don Quixote?</span>
+          <span class="qp" onclick="setPrompt(this)">What year did World War II end?</span>
+        </div>
+      </div>
+      <div class="right-controls">
+        <button class="btn btn-run" id="runBtn" onclick="runArena()">
+          <span class="spin" id="runSpin" style="display:none"></span>
+          <span id="runLabel">Run Arena</span>
+        </button>
+        <button class="btn btn-outline" onclick="clearAll()">Clear All</button>
+      </div>
+    </div>
+
+    <!-- Model selector -->
+    <div style="margin-top:1.25rem">
+      <div class="section-label" style="margin-bottom:0.5rem">Active Models</div>
+      <div class="model-pills" id="modelPills"></div>
+    </div>
+  </div>
+
+  <!-- ARENA -->
+  <div class="section-label">Model Responses</div>
+  <div class="arena-header">
+    <div class="tally" id="tally" style="display:none">
+      <span class="tally-item">Factual: <strong id="t-f">0</strong></span>
+      <span class="tally-item">Uncertain: <strong id="t-u">0</strong></span>
+      <span class="tally-item">Hallucinated: <strong id="t-h">0</strong></span>
+    </div>
+  </div>
+  <div class="arena-grid" id="arenaGrid"></div>
+
+  <!-- DIFF VIEW -->
+  <div class="diff-section" id="diffSection">
+    <div class="section-label">Response Diff</div>
+    <div class="diff-grid" id="diffGrid"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="history-section" id="historySection" style="display:none">
+    <div class="section-label">Session History</div>
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Prompt</th>
+          <th>Model</th>
+          <th>Verdict</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  <span>LLM Hallucination Arena</span>
+  <span>Powered by HuggingFace Inference API · NLI via bart-large-mnli</span>
+</footer>
+
+<script>
+// ─── MODELS ────────────────────────────────────────────────────────────
+const MODELS = [
+  { id: 'mistralai/Mistral-7B-Instruct-v0.2',  label: 'Mistral-7B', org: 'Mistral AI',    selected: true },
+  { id: 'HuggingFaceH4/zephyr-7b-beta',        label: 'Zephyr-7B',  org: 'HuggingFace',  selected: true },
+  { id: 'tiiuae/falcon-7b-instruct',           label: 'Falcon-7B',  org: 'TII UAE',       selected: false },
+  { id: 'google/flan-t5-xxl',                  label: 'Flan-T5 XXL',org: 'Google',        selected: false },
+];
+
+const NLI_MODEL = 'facebook/bart-large-mnli';
+
+let sessionHistory = [];
+let runCount = 0;
+
+// ─── TOKEN ─────────────────────────────────────────────────────────────
+const tokenInput = document.getElementById('hfToken');
+const tokenStatus = document.getElementById('tokenStatus');
+tokenInput.addEventListener('input', () => {
+  const v = tokenInput.value.trim();
+  const ok = v.startsWith('hf_') && v.length > 20;
+  tokenStatus.textContent = ok ? 'Active' : 'Not set';
+  tokenStatus.className = 'status-pill ' + (ok ? 'set' : 'unset');
+});
+function getToken() { return tokenInput.value.trim(); }
+
+// ─── MODEL PILLS ───────────────────────────────────────────────────────
+function renderPills() {
+  const container = document.getElementById('modelPills');
+  container.innerHTML = '';
+  MODELS.forEach((m, i) => {
+    const pill = document.createElement('div');
+    pill.className = 'model-pill' + (m.selected ? ' selected' : '');
+    pill.textContent = m.label;
+    pill.onclick = () => {
+      MODELS[i].selected = !MODELS[i].selected;
+      renderPills();
+      renderCards();
+    };
+    container.appendChild(pill);
+  });
+}
+
+// ─── QUICK PROMPTS ─────────────────────────────────────────────────────
+function setPrompt(el) {
+  document.getElementById('promptInput').value = el.textContent;
+}
+
+// ─── RENDER CARDS ──────────────────────────────────────────────────────
+function renderCards(states = {}) {
+  const grid = document.getElementById('arenaGrid');
+  grid.innerHTML = '';
+  const active = MODELS.filter(m => m.selected);
+  active.forEach(m => {
+    const state = states[m.id] || { status: 'idle', text: '', scores: null };
+    const card = buildCard(m, state);
+    grid.appendChild(card);
+  });
+}
+
+function buildCard(model, state) {
+  const card = document.createElement('div');
+  card.className = 'model-card';
+  card.id = 'card-' + btoa(model.id).replace(/=/g,'');
+
+  const statusLabels = { idle: 'Idle', loading: 'Running…', done: 'Done', error: 'Error' };
+  const statusCls    = { idle: 'idle', loading: 'loading', done: 'done', error: 'error' };
+
+  let responseHTML = '';
+  if (state.status === 'idle') {
+    responseHTML = '<span style="color:var(--ink-faint); font-style:italic">Awaiting prompt…</span>';
+  } else if (state.status === 'loading') {
+    responseHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  } else if (state.status === 'error') {
+    responseHTML = `<span style="color:var(--red)">${state.text}</span>`;
+  } else {
+    responseHTML = escapeHtml(state.text);
+  }
+
+  let scoresHTML = '';
+  let verdictHTML = '<div class="verdict-banner v-idle"><span class="verdict-icon">·</span> Awaiting analysis</div>';
+
+  if (state.scores) {
+    const { hallScore, entail, contra, neutral } = state.scores;
+    const hpct = Math.round(hallScore * 100);
+    const hcls = hallScore < 0.3 ? 'c-green' : hallScore < 0.6 ? 'c-amber' : 'c-red';
+    const ecls = entail > 0.5 ? 'c-green' : 'c-amber';
+
+    scoresHTML = `
+      <div class="scores-row">
+        <div class="score-chip">
+          <span class="chip-val ${hcls}">${hpct}%</span>
+          <span class="chip-label">Hallucination</span>
+        </div>
+        <div class="score-chip">
+          <span class="chip-val ${ecls}">${Math.round(entail*100)}%</span>
+          <span class="chip-label">Entailment</span>
+        </div>
+        <div class="score-chip">
+          <span class="chip-val c-red">${Math.round(contra*100)}%</span>
+          <span class="chip-label">Contradiction</span>
+        </div>
+      </div>`;
+
+    let vClass, vIcon, vText;
+    if (hallScore < 0.3)       { vClass = 'v-factual';      vIcon = '✓'; vText = 'Likely Factual'; }
+    else if (hallScore < 0.6)  { vClass = 'v-uncertain';    vIcon = '~'; vText = 'Uncertain';       }
+    else                        { vClass = 'v-hallucinated'; vIcon = '✕'; vText = 'Likely Hallucinated'; }
+
+    verdictHTML = `<div class="verdict-banner ${vClass}"><span class="verdict-icon">${vIcon}</span>${vText}</div>`;
+  }
+
+  card.innerHTML = `
+    <div class="card-top">
+      <div>
+        <div class="model-name">${model.label}</div>
+        <div class="model-org">${model.org} · ${model.id.split('/')[1]}</div>
+      </div>
+      <div class="card-status ${statusCls[state.status]}">${statusLabels[state.status]}</div>
+    </div>
+    <div class="card-body">
+      <div class="response-text">${responseHTML}</div>
+      ${scoresHTML}
+    </div>
+    ${verdictHTML}
+  `;
+  return card;
+}
+
+function updateCard(model, state) {
+  const id = 'card-' + btoa(model.id).replace(/=/g,'');
+  const existing = document.getElementById(id);
+  if (!existing) return;
+  const newCard = buildCard(model, state);
+  newCard.id = id;
+  existing.replaceWith(newCard);
+}
+
+// ─── HF API ────────────────────────────────────────────────────────────
+async function hfPost(model, payload) {
+  const token = getToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+    method: 'POST', headers, body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(`HF ${res.status}: ${(await res.text()).slice(0,120)}`);
+  return res.json();
+}
+
+async function generateText(modelId, prompt) {
+  // Try chat-instruction format
+  const instructPrompt = `<s>[INST] Answer briefly and factually: ${prompt} [/INST]`;
+  const data = await hfPost(modelId, {
+    inputs: instructPrompt,
+    parameters: { max_new_tokens: 180, temperature: 0.4, return_full_text: false, do_sample: false }
+  });
+  if (Array.isArray(data) && data[0]?.generated_text) return data[0].generated_text.trim();
+  if (typeof data === 'string') return data.trim();
+  if (data.generated_text) return data.generated_text.trim();
+  throw new Error('Unexpected generation format');
+}
+
+async function nliScore(claim) {
+  // Using zero-shot classification
+  const data = await hfPost(NLI_MODEL, {
+    inputs: claim,
+    parameters: { candidate_labels: ['factually correct', 'factually incorrect', 'uncertain'] }
+  });
+  if (data.labels && data.scores) {
+    const factIdx   = data.labels.indexOf('factually correct');
+    const wrongIdx  = data.labels.indexOf('factually incorrect');
+    const unkIdx    = data.labels.indexOf('uncertain');
+    return {
+      entail:  data.scores[factIdx]  ?? 0.33,
+      contra:  data.scores[wrongIdx] ?? 0.33,
+      neutral: data.scores[unkIdx]   ?? 0.33,
+      hallScore: data.scores[wrongIdx] ?? 0.33,
+    };
+  }
+  // fallback uniform
+  return { entail: 0.33, contra: 0.33, neutral: 0.34, hallScore: 0.33 };
+}
+
+// ─── RUN ARENA ─────────────────────────────────────────────────────────
+async function runArena() {
+  const prompt = document.getElementById('promptInput').value.trim();
+  if (!prompt) { alert('Enter a prompt first.'); return; }
+
+  const active = MODELS.filter(m => m.selected);
+  if (!active.length) { alert('Select at least one model.'); return; }
+
+  runCount++;
+  const btn = document.getElementById('runBtn');
+  const spin = document.getElementById('runSpin');
+  const label = document.getElementById('runLabel');
+  btn.disabled = true;
+  spin.style.display = 'inline-block';
+  label.textContent = 'Running…';
+
+  // Reset cards to loading
+  const stateMap = {};
+  active.forEach(m => { stateMap[m.id] = { status: 'loading', text: '', scores: null }; });
+  renderCards(stateMap);
+
+  // Hide diff + tally
+  document.getElementById('diffSection').classList.remove('visible');
+  document.getElementById('tally').style.display = 'none';
+
+  const responses = {};
+  const scoreMap = {};
+
+  // Run all models in parallel
+  await Promise.all(active.map(async (model) => {
+    try {
+      const text = await generateText(model.id, prompt);
+      responses[model.id] = text;
+      stateMap[model.id] = { status: 'done', text, scores: null };
+      updateCard(model, stateMap[model.id]);
+
+      // Now score it
+      const scores = await nliScore(text);
+      scoreMap[model.id] = scores;
+      stateMap[model.id].scores = scores;
+      updateCard(model, stateMap[model.id]);
+
+      // Add to history
+      const verdict = scores.hallScore < 0.3 ? 'f' : scores.hallScore < 0.6 ? 'u' : 'h';
+      sessionHistory.push({ run: runCount, prompt, model: model.label, verdict, score: Math.round(scores.hallScore * 100) });
+
+    } catch(e) {
+      stateMap[model.id] = { status: 'error', text: e.message, scores: null };
+      updateCard(model, stateMap[model.id]);
+    }
+  }));
+
+  // Tally
+  const verdicts = active.map(m => {
+    const s = scoreMap[m.id];
+    if (!s) return null;
+    return s.hallScore < 0.3 ? 'f' : s.hallScore < 0.6 ? 'u' : 'h';
+  }).filter(Boolean);
+
+  document.getElementById('t-f').textContent = verdicts.filter(v=>v==='f').length;
+  document.getElementById('t-u').textContent = verdicts.filter(v=>v==='u').length;
+  document.getElementById('t-h').textContent = verdicts.filter(v=>v==='h').length;
+  document.getElementById('tally').style.display = 'flex';
+
+  // Diff view for first two
+  const respPairs = active.filter(m => responses[m.id]);
+  if (respPairs.length >= 2) {
+    renderDiff(respPairs[0], responses[respPairs[0].id], respPairs[1], responses[respPairs[1].id]);
+  }
+
+  // History
+  renderHistory();
+
+  btn.disabled = false;
+  spin.style.display = 'none';
+  label.textContent = 'Run Arena';
+}
+
+// ─── DIFF ──────────────────────────────────────────────────────────────
+function renderDiff(m1, t1, m2, t2) {
+  const section = document.getElementById('diffSection');
+  const grid = document.getElementById('diffGrid');
+
+  // Simple word-level diff highlight
+  const words1 = t1.split(/\s+/);
+  const words2 = t2.split(/\s+/);
+  const set1 = new Set(words1.map(w=>w.toLowerCase().replace(/[^a-z0-9]/g,'')));
+  const set2 = new Set(words2.map(w=>w.toLowerCase().replace(/[^a-z0-9]/g,'')));
+
+  const annotate = (words, otherSet) => words.map(w => {
+    const clean = w.toLowerCase().replace(/[^a-z0-9]/g,'');
+    if (clean.length > 3 && !otherSet.has(clean)) return `<mark class="added">${escapeHtml(w)}</mark>`;
+    return escapeHtml(w);
+  }).join(' ');
+
+  grid.innerHTML = `
+    <div class="diff-col">
+      <div class="diff-col-head"><span>${m1.label}</span><span>unique words highlighted</span></div>
+      <div class="diff-content">${annotate(words1, set2)}</div>
+    </div>
+    <div class="diff-col">
+      <div class="diff-col-head"><span>${m2.label}</span><span>unique words highlighted</span></div>
+      <div class="diff-content">${annotate(words2, set1)}</div>
+    </div>
+  `;
+  section.classList.add('visible');
+}
+
+// ─── HISTORY ───────────────────────────────────────────────────────────
+function renderHistory() {
+  if (!sessionHistory.length) return;
+  document.getElementById('historySection').style.display = 'block';
+  const body = document.getElementById('historyBody');
+  body.innerHTML = sessionHistory.slice().reverse().slice(0,30).map((h,i) => `
+    <tr>
+      <td>${sessionHistory.length - i}</td>
+      <td>${escapeHtml(h.prompt.slice(0,60))}${h.prompt.length>60?'…':''}</td>
+      <td>${h.model}</td>
+      <td><span class="verdict-tag ${h.verdict}">${h.verdict==='f'?'Factual':h.verdict==='u'?'Uncertain':'Hallucinated'}</span></td>
+      <td>${h.score}%</td>
+    </tr>
+  `).join('');
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────
+function clearAll() {
+  document.getElementById('promptInput').value = '';
+  renderCards({});
+  document.getElementById('diffSection').classList.remove('visible');
+  document.getElementById('tally').style.display = 'none';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────
+renderPills();
+renderCards({});
+</script>
+</body>
+</html>
